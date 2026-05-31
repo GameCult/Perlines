@@ -11,15 +11,17 @@ reservoir, denoising, and presentation machinery used by the engine.
 
 ## Authority Map
 
-- Owner: `PerlinesSignalProcessor` owns audio synthesis, FFT whitening, key
-  detection, and projection from frequency bins into musical scale-note lanes.
-- Inputs: frame time and delta time from the Fensalir runtime loop.
+- Owner: `PerlinesSignalProcessor` owns FFT whitening, key detection, and
+  projection from frequency bins into musical scale-note lanes.
+- Inputs: a Fensalir-owned Windows system-loopback capture stem when available;
+  otherwise frame time and delta time drive the procedural fallback signal.
 - Outputs: one normalized Float32 column of scale-note energy per frame,
   transposed into note-owned TubeField splines for rendering.
 - Derived state: detected key, flux, tonal center, and energy are diagnostic
   readouts derived from the same spectral pass.
-- Forbidden writers: render passes, UI controls, and tube lowerings do not
-  decide spectral content. They only consume the field evidence.
+- Forbidden writers: render passes, UI controls, tube lowerings, and audio stem
+  metadata do not decide spectral content. They only feed or consume the field
+  evidence path.
 - Shared path: visible splines, TubeField evidence, headless captures, and UI
   telemetry all read the same rolling note reservoir and version counter.
 - Deletion line: Unity trail ownership, arbitrary band-to-spline assignment,
@@ -27,7 +29,10 @@ reservoir, denoising, and presentation machinery used by the engine.
 
 ## Pipeline
 
-1. Procedural audio is synthesized as a test signal.
+1. Perlines requests a system-loopback capture stem from the Fensalir audio
+   host, drains published audio stem frames when available, and mixes their
+   channels to a mono analysis window. If no stem frame arrives, a procedural
+   signal is synthesized as a test fallback.
 2. A Hann-windowed FFT measures the current frame.
 3. Each FFT bin is divided by a smoothed envelope, producing adaptive whitening
    so persistent loud bands stop monopolizing the field.
@@ -49,6 +54,8 @@ reservoir, denoising, and presentation machinery used by the engine.
 
 - Musical lanes are keyed scale notes, not arbitrary FFT bins.
 - Each TubeField spline belongs to one detected-key note lane.
+- Live audio stems are inputs to the same spectral owner as the fallback signal;
+  they do not bypass whitening, key detection, or lane projection.
 - Perlines uploads a compact 70 by 96 Float32 resource, not a native-resolution
   buffer.
 - The showy dance splines are derived from the same note reservoir. They do not

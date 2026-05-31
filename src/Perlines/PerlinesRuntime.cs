@@ -7,7 +7,7 @@ using Aquarium.Engine.Ui;
 
 namespace Perlines;
 
-public sealed class PerlinesRuntime : IAquariumRuntime
+public sealed class PerlinesRuntime : IAquariumRuntime, IAquariumRuntimeServicesReceiver
 {
     private const int FftSize = 2048;
     private const int NoteLaneCount = 70;
@@ -17,6 +17,7 @@ public sealed class PerlinesRuntime : IAquariumRuntime
     private const string ClaimKey = "claim:perlines:whitened-fft:tube";
     private const string CandidateKey = "candidate:perlines:whitened-fft:tube";
     private const string ProducerKey = "perlines:adaptive-whitener";
+    private const string LoopbackProfileId = "perlines:system-loopback";
 
     private readonly PerlinesSignalProcessor signal = new(FftSize, NoteLaneCount, sampleRate: 48000.0f);
     private readonly SmoothNoise danceNoise = new(0xDA7A);
@@ -24,6 +25,8 @@ public sealed class PerlinesRuntime : IAquariumRuntime
     private readonly float[] rollingNotes = new float[NoteLaneCount * HistoryColumns];
     private readonly float[] tubeSamples = new float[NoteLaneCount * HistoryColumns];
     private readonly float[] uploadColumn = new float[NoteLaneCount];
+    private AquariumRuntimeServices services = AquariumRuntimeServices.Empty;
+    private float[] stemMixBuffer = [];
     private float timeSeconds;
     private float previousTimeSeconds;
     private float cameraYaw;
@@ -31,8 +34,11 @@ public sealed class PerlinesRuntime : IAquariumRuntime
     private float cameraDistance = 7.8f;
     private int rollingColumn;
     private ulong resourceVersion = 1;
+    private long consumedAudioSequence = -1;
     private bool autoOrbit = true;
     private bool freezeSignal;
+    private bool usedAudioStemThisFrame;
+    private string audioInputLabel = "synthetic";
 
     public AquariumRuntimeOptions Options { get; private set; }
 
@@ -79,6 +85,7 @@ public sealed class PerlinesRuntime : IAquariumRuntime
                 panel.Slider("Camera Distance", () => cameraDistance, value => cameraDistance = Math.Clamp(value, 4.5f, 13.0f), 4.5f, 13.0f, "0.00");
                 panel.Readout("FFT", () => $"{FftSize} samples / {NoteLaneCount} scale-note lanes / v{resourceVersion}");
                 panel.Readout("Key", () => signal.DetectedKeyName);
+                panel.Readout("Input", () => audioInputLabel);
                 panel.Readout("Whitening", () => $"flux {signal.LastFlux:0.000} / tonal center {signal.LastCentroid:0.000} / energy {signal.LastEnergy:0.000}");
                 panel.Readout("Renderer", () => "Fensalir TubeField + shared reservoir + final reconstruction");
             })
@@ -92,6 +99,12 @@ public sealed class PerlinesRuntime : IAquariumRuntime
 
     public void Start()
     {
+        Audio.EnqueueSystemLoopbackCapture(
+            LoopbackProfileId,
+            "windows-default-render",
+            "System mix",
+            enabled: true,
+            sequence: 1);
         Console.WriteLine("Perlines adaptive FFT tube field booted.");
     }
 
@@ -103,7 +116,13 @@ public sealed class PerlinesRuntime : IAquariumRuntime
 
         if (!freezeSignal)
         {
-            signal.Advance(timeSeconds, safeDelta, uploadColumn);
+            usedAudioStemThisFrame = TryAdvanceFromAudioStem(safeDelta, uploadColumn);
+            if (!usedAudioStemThisFrame)
+            {
+                signal.Advance(timeSeconds, safeDelta, uploadColumn);
+                audioInputLabel = "synthetic fallback";
+            }
+
             rollingColumn = (rollingColumn + 1) % HistoryColumns;
             Array.Copy(uploadColumn, 0, rollingNotes, rollingColumn * NoteLaneCount, NoteLaneCount);
             resourceVersion++;
@@ -157,6 +176,11 @@ public sealed class PerlinesRuntime : IAquariumRuntime
 
     public void Dispose()
     {
+    }
+
+    public void AttachServices(AquariumRuntimeServices runtimeServices)
+    {
+        services = runtimeServices;
     }
 
     internal void SetOptions(AquariumRuntimeOptions options)
@@ -303,6 +327,61 @@ public sealed class PerlinesRuntime : IAquariumRuntime
             FieldEvidenceFrame = frame,
             SplineFrame = BuildDanceSplineFrame(),
         };
+    }
+
+    private bool TryAdvanceFromAudioStem(float deltaSeconds, Span<float> output)
+    {
+        var frame = services.AudioStems
+            .DrainPublishedFrames(maxFrames: 16)
+            .Where(candidate => candidate.Channels.Count > 0 && candidate.FrameCount > 0 && candidate.SampleRate > 0)
+            .OrderBy(candidate => candidate.Sequence)
+            .LastOrDefault();
+        if (frame is null || frame.Sequence == consumedAudioSequence)
+        {
+            return false;
+        }
+
+        consumedAudioSequence = frame.Sequence;
+        var frameCount = frame.FrameCount;
+        if (stemMixBuffer.Length < frameCount)
+        {
+            stemMixBuffer = new float[frameCount];
+        }
+
+        Array.Clear(stemMixBuffer, 0, frameCount);
+        var mixedChannels = 0;
+        foreach (var channel in frame.Channels)
+        {
+            if (channel.Samples.Length == 0)
+            {
+                continue;
+            }
+
+            var count = Math.Min(frameCount, channel.Samples.Length);
+            for (var index = 0; index < count; index++)
+            {
+                stemMixBuffer[index] += channel.Samples[index];
+            }
+
+            mixedChannels++;
+        }
+
+        if (mixedChannels == 0)
+        {
+            return false;
+        }
+
+        var scale = 1.0f / mixedChannels;
+        for (var index = 0; index < frameCount; index++)
+        {
+            stemMixBuffer[index] = Math.Clamp(stemMixBuffer[index] * scale, -1.0f, 1.0f);
+        }
+
+        signal.AdvanceFromSamples(stemMixBuffer.AsSpan(0, frameCount), frame.SampleRate, deltaSeconds, output);
+        var stem = frame.Channels[0];
+        var source = string.IsNullOrWhiteSpace(stem.DisplayName) ? stem.StemId : stem.DisplayName;
+        audioInputLabel = $"{frame.ProfileId} / {source} / seq {frame.Sequence}";
+        return true;
     }
 
     private AquariumSplineFrame BuildDanceSplineFrame()

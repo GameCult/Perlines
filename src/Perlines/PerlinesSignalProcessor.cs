@@ -12,7 +12,7 @@ internal sealed class PerlinesSignalProcessor
 
     private readonly int fftSize;
     private readonly int laneCount;
-    private readonly float sampleRate;
+    private float sampleRate;
     private readonly int binCount;
     private readonly float[] window;
     private readonly float[] envelope;
@@ -20,6 +20,7 @@ internal sealed class PerlinesSignalProcessor
     private readonly float[] chroma;
     private readonly float[] smoothedChroma;
     private readonly float[] previousLanes;
+    private readonly float[] externalSamples;
     private readonly Complex[] spectrum;
     private readonly SmoothNoise noise = new(0x5EED);
     private float phaseA;
@@ -27,6 +28,8 @@ internal sealed class PerlinesSignalProcessor
     private float phaseC;
     private int detectedRoot = 9;
     private bool detectedMinor;
+    private int externalWriteIndex;
+    private int externalSampleCount;
 
     public float LastEnergy { get; private set; }
 
@@ -53,6 +56,7 @@ internal sealed class PerlinesSignalProcessor
         chroma = new float[12];
         smoothedChroma = new float[12];
         previousLanes = new float[laneCount];
+        externalSamples = new float[fftSize];
         spectrum = new Complex[fftSize];
         Array.Fill(envelope, 0.08f);
 
@@ -70,6 +74,30 @@ internal sealed class PerlinesSignalProcessor
         }
 
         FillSignal(timeSeconds);
+        Analyze(deltaSeconds, output);
+    }
+
+    public void AdvanceFromSamples(ReadOnlySpan<float> samples, int inputSampleRate, float deltaSeconds, Span<float> output)
+    {
+        if (output.Length < laneCount)
+        {
+            throw new ArgumentException("Output span is smaller than the configured lane count.", nameof(output));
+        }
+
+        if (samples.IsEmpty || inputSampleRate <= 0)
+        {
+            Advance(0.0f, deltaSeconds, output);
+            return;
+        }
+
+        sampleRate = inputSampleRate;
+        PushExternalSamples(samples);
+        FillExternalWindow();
+        Analyze(deltaSeconds, output);
+    }
+
+    private void Analyze(float deltaSeconds, Span<float> output)
+    {
         Fft(spectrum);
         WhitenBins(Math.Max(deltaSeconds, 1.0f / 240.0f));
         DetectKey();
@@ -97,6 +125,34 @@ internal sealed class PerlinesSignalProcessor
                 MathF.Sin(phaseC + phaseB * 0.12f) * (0.12f + pulse * 0.24f) +
                 noise.Fractal(localTime * 4.0f, 11.0f) * 0.03f;
             spectrum[index] = new Complex(sample * window[index], 0.0f);
+        }
+    }
+
+    private void PushExternalSamples(ReadOnlySpan<float> samples)
+    {
+        foreach (var sample in samples)
+        {
+            externalSamples[externalWriteIndex] = Math.Clamp(sample, -1.0f, 1.0f);
+            externalWriteIndex = (externalWriteIndex + 1) % fftSize;
+            externalSampleCount = Math.Min(externalSampleCount + 1, fftSize);
+        }
+    }
+
+    private void FillExternalWindow()
+    {
+        var available = Math.Max(0, Math.Min(externalSampleCount, fftSize));
+        var first = (externalWriteIndex - available + fftSize) % fftSize;
+        var pad = fftSize - available;
+        for (var index = 0; index < pad; index++)
+        {
+            spectrum[index] = Complex.Zero;
+        }
+
+        for (var index = 0; index < available; index++)
+        {
+            var sourceIndex = (first + index) % fftSize;
+            var targetIndex = pad + index;
+            spectrum[targetIndex] = new Complex(externalSamples[sourceIndex] * window[targetIndex], 0.0f);
         }
     }
 
