@@ -41,3 +41,5 @@ E:\Projects\Perlines\scripts\capture-headless.ps1
 - A Fensalir spline presentation turns that reservoir into the old radial
   Perlines trail storm with a divergence-free curl-noise flow, while TubeField
   evidence remains available to the shared reservoir path.
+- Low-energy bands taper and fade out instead of leaving permanent bright
+  strokes.

@@ -53,6 +53,8 @@ reservoir, denoising, and presentation machinery used by the engine.
   buffer.
 - The showy dance splines are derived from the same note reservoir. They do not
   own signal truth.
+- Low-energy bands fade to invisible brushstroke segments; dead lanes do not
+  keep an always-on tube silhouette.
 - The rolling spectrum is a field-evidence resource, not private renderer
   geometry.
 - Fensalir owns D3D12 buffers, TubeField dispatch, reservoir reuse, bloom, and

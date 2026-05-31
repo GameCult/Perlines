@@ -280,10 +280,10 @@ public sealed class PerlinesRuntime : IAquariumRuntime
                     AmplitudeScale: 1.75f,
                     NormalizeMin: 0.0f,
                     NormalizeMax: 1.0f,
-                    BaseRadius: 0.014f,
-                    RadiusScale: 0.052f,
-                    Alpha: 0.92f,
-                    Feather: 0.32f,
+                    BaseRadius: 0.002f,
+                    RadiusScale: 0.072f,
+                    Alpha: 0.86f,
+                    Feather: 0.18f,
                     RampTexturePath: "",
                     RampResourceKey: AquariumBuiltInFieldResources.BlackbodyRampResourceKey,
                     EmissionScale: 9.2f,
@@ -311,7 +311,7 @@ public sealed class PerlinesRuntime : IAquariumRuntime
         var style = new AquariumSplineStyle(
             radius: 0.012f,
             emission: 10.0f,
-            alpha: 0.94f,
+            alpha: 1.0f,
             normalExponent: 0.42f,
             feather: 0.08f);
 
@@ -331,8 +331,11 @@ public sealed class PerlinesRuntime : IAquariumRuntime
                 var historyIndex = Math.Clamp((int)MathF.Round(t * (HistoryColumns - 1)), 0, HistoryColumns - 1);
                 var physicalColumn = (rollingColumn + 1 + historyIndex) % HistoryColumns;
                 var energy = rollingNotes[physicalColumn * NoteLaneCount + note];
-                var lift = MathF.Pow(Math.Clamp(energy, 0.0f, 1.0f), 0.55f);
-                var flare = MathF.Pow(lift, 1.7f);
+                var visibility = EnergyVisibility(energy);
+                var brushTaper = BrushTaper(t);
+                var strokeAlpha = visibility * brushTaper;
+                var lift = MathF.Pow(Math.Clamp(energy, 0.0f, 1.0f), 0.55f) * strokeAlpha;
+                var flare = MathF.Pow(Math.Clamp(energy, 0.0f, 1.0f), 1.5f) * strokeAlpha;
                 var derivative = flowNoise.Derivative(new Vector4(
                     position.X * 0.58f + note * 0.013f,
                     position.Y * 0.72f + note01 * 2.0f,
@@ -345,10 +348,10 @@ public sealed class PerlinesRuntime : IAquariumRuntime
                 }
 
                 var pulse = lift * (0.18f + energy * 0.42f);
-                var drift = 0.026f + lift * 0.12f;
+                var drift = 0.010f + lift * 0.15f;
                 var jitter = danceNoise.Fractal(note * 1.7f + point * 0.23f + timeSeconds * 0.5f, 2.1f) * 0.025f * (0.2f + lift);
                 position += radial * (drift + pulse) + curl * (0.055f + lift * 0.20f) + Vector3.UnitY * jitter;
-                vertices[point] = new AquariumSplineVertex(position, HotColor(flare, laneHue));
+                vertices[point] = new AquariumSplineVertex(position, HotColor(flare, laneHue, strokeAlpha));
             }
 
             splines.Add(new AquariumSpline3D($"perlines:dance:{note:00}", vertices, style, CatmullRomSubdivisions: 5));
@@ -357,24 +360,35 @@ public sealed class PerlinesRuntime : IAquariumRuntime
         return new AquariumSplineFrame { Splines = splines };
     }
 
-    private static Vector4 HotColor(float energy, int laneHue)
+    private static float EnergyVisibility(float energy) => SmoothStep(0.08f, 0.46f, energy);
+
+    private static float BrushTaper(float t) =>
+        MathF.Pow(SmoothStep(0.0f, 0.10f, t) * (1.0f - SmoothStep(0.88f, 1.0f, t)), 0.55f);
+
+    private static float SmoothStep(float edge0, float edge1, float value)
+    {
+        var t = Math.Clamp((value - edge0) / Math.Max(edge1 - edge0, 0.0001f), 0.0f, 1.0f);
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    private static Vector4 HotColor(float energy, int laneHue, float alpha)
     {
         var e = Math.Clamp(energy, 0.0f, 1.0f);
-        var red = Math.Clamp(2.1f + e * 3.4f, 0.0f, 6.0f);
-        var green = Math.Clamp(0.02f + e * 0.85f, 0.0f, 1.6f);
+        var red = Math.Clamp(e * 5.7f, 0.0f, 6.0f);
+        var green = Math.Clamp(e * 1.35f, 0.0f, 1.6f);
         var blue = Math.Clamp(e * e * 0.18f, 0.0f, 0.45f);
         if (laneHue == 0)
         {
-            green += 1.35f;
+            green += e * 1.35f;
             blue += 0.08f;
         }
         else if (laneHue == 4)
         {
-            blue += 1.2f;
+            blue += e * 1.2f;
             red *= 0.72f;
         }
 
-        return new Vector4(red, green, blue, Math.Clamp(0.22f + e * 0.78f, 0.0f, 1.0f));
+        return new Vector4(red, green, blue, Math.Clamp(alpha, 0.0f, 1.0f));
     }
 
     private AquariumFieldResourceUpload[] BuildResourceUploads()
