@@ -124,7 +124,7 @@ function frame(now) {
       `${sc.name}   ${canvas.width}x${canvas.height}\n` +
       `frame ${(rn ? pct(ring, rn, 0.5) : 0).toFixed(1)} ms p50  ${pct(ring, rn, 0.95).toFixed(1)} p95  (budget 16.7)  cpu ${cpuMs.toFixed(2)} ms` +
       (timer && gpuMs ? `  gpu ${gpuMs.toFixed(2)} ms` : '') + '\n' +
-      `key ${k.name}${k.mode === 'minor' ? '' : ''} (${(k.confidence * 100) | 0}%)   onsets ${analysis.onset.count}   flux ${analysis.flux.toFixed(2)}   ` +
+      `key ${k.name} (${(k.confidence * 100) | 0}%)   onsets ${analysis.onset.count}   flux ${analysis.flux.toFixed(2)}   ` +
       `source ${demo ? 'synthetic demo' : audio.mode}`;
   }
   requestAnimationFrame(frame);

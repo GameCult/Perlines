@@ -12,6 +12,7 @@ http.createServer(async (req, res) => {
   try {
     const f = join(root, p.endsWith('/') ? p + 'index.html' : p);
     if (!f.startsWith(root)) throw new Error('outside root');
-    res.writeHead(200, { 'content-type': types[extname(f)] || 'application/octet-stream' }).end(await readFile(f));
+    const body = await readFile(f);
+    res.writeHead(200, { 'content-type': types[extname(f)] || 'application/octet-stream' }).end(body);
   } catch { res.writeHead(404).end('not found'); }
 }).listen(port, '127.0.0.1', () => console.log(`Perlines on http://localhost:${port}/`));
