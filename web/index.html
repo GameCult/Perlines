@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perlines</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #cfd; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #ui { position: fixed; left: 0; right: 0; top: 0; padding: 10px 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+        background: linear-gradient(#000a, #0000); transition: opacity .4s; }
+  #ui.idle { opacity: 0; pointer-events: none; }
+  button, label.btn { background: #0008; color: #cfd; border: 1px solid #4a6; padding: 5px 10px; font: inherit; cursor: pointer; border-radius: 3px; }
+  button:hover, label.btn:hover, button.on { background: #4a64; }
+  #hud { position: fixed; left: 12px; bottom: 10px; white-space: pre; opacity: .85; text-shadow: 0 0 4px #000; }
+  #msg { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); text-align: center; opacity: .8; max-width: 36em; pointer-events: none; }
+  #msg.hide { display: none; }
+  audio { position: fixed; right: 12px; bottom: 10px; width: 280px; height: 30px; opacity: .6; }
+  audio:not([src]) { display: none; }
+  #bench { position: fixed; inset: 0; margin: 0; padding: 12px; background: #000c; overflow: auto; display: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <label class="btn">Open audio file<input id="file" type="file" accept="audio/*" hidden></label>
+  <button id="mic">Microphone</button>
+  <button id="demo">Demo (silent, synthetic)</button>
+  <span style="flex:1"></span>
+  <button data-scene="0">1 Aurora disk</button>
+  <button data-scene="1">2 Burning water</button>
+  <button data-scene="2">3 Vector trails</button>
+  <button id="full">Fullscreen (F)</button>
+</div>
+<div id="msg"><b>Perlines</b><br>Drop an audio file anywhere, or use the microphone.<br>Keys: 1 2 3 scenes, F fullscreen, H HUD.<br>
+<span style="opacity:.6">Nothing leaves your browser: audio is analysed locally.</span></div>
+<div id="hud"></div>
+<audio id="audio" controls></audio>
+<pre id="bench"></pre>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
