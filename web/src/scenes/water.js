@@ -35,7 +35,7 @@ void main(){
   vec3 cold = tint * 0.6;
   vec3 c = mix(cold, hot, smoothstep(0.2, 0.9, flame + bass)) * (0.25 + 0.75 * exp(-depth * 0.12));
   c *= mix(0.35, 1.0, tint.b + 0.2) ;
-  o = vec4(c * (0.15 + 0.5 * level + 0.35 * bass) * 0.22, 1.0);
+  o = vec4(c * (0.15 + 0.5 * level + 0.35 * bass) * 0.45, 1.0);
 }`;
 
 const PVS = GLSL_HEAD + `
@@ -45,14 +45,14 @@ out float life; out float heat;
 float h1(float x){ return fract(sin(x * 127.1) * 43758.5453); }
 void main(){
   float age = time - a.x;
-  if (a.x < 0.0 || age < 0.0 || age > 2.6) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+  if (a.x < 0.0 || age < 0.0 || age > 2.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
   float s = a.y, str = a.z;
   float vx = (h1(s) - 0.5) * 1.4 * (0.5 + str) + (a.w - 0.5) * 0.7;
   float vy = (1.2 + 2.6 * h1(s + 3.0) * str + 0.8 * str);
   float x = (a.w * 2.0 - 1.0) * 0.95 + vx * age + 0.08 * sin(age * 7.0 + s * 40.0);
   float y = -0.1 + vy * age - 1.9 * age * age;
   if (y < -0.1 && age > 0.1) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
-  life = 1.0 - age / 2.6; heat = life * (0.4 + str);
+  life = 1.0 - age / 2.0; heat = life * (0.15 + 0.6 * str);
   gl_Position = vec4(x / (res.x / res.y), y, 0.0, 1.0);
   gl_PointSize = (2.0 + 9.0 * h1(s + 7.0) * str) * (0.4 + life) * res.y / 900.0;
 }`;
@@ -61,7 +61,7 @@ in float life; in float heat; uniform vec3 tint; out vec4 o;
 void main(){
   vec2 q = gl_PointCoord * 2.0 - 1.0; float r = dot(q, q); if (r > 1.0) discard;
   vec3 fire = mix(vec3(0.9, 0.12, 0.02), vec3(1.0, 0.85, 0.4), heat);
-  fire = mix(fire, tint * 1.3, 0.25 * (1.0 - heat));
+  fire = mix(fire, tint * 1.3, 0.15 * (1.0 - heat));
   o = vec4(fire * (1.0 - r) * life * 0.9, 1.0);
 }`;
 
@@ -96,7 +96,7 @@ export class BurningWater {
     if (A.onset.count !== this.seen) {
       this.seen = A.onset.count;
       const s = A.onset.strength;
-      this.spawn(Math.round(80 + 520 * s), t, 0.35 + 0.65 * s);
+      this.spawn(Math.round(40 + 260 * s), t, 0.35 + 0.65 * s);
       const r = this.rhead; this.rhead = (this.rhead + 1) % 8;
       this.ripples.set([(Math.random() - 0.5) * 6, 1.5 + Math.random() * 4, t, 0.5 + s], r * 4);
     }

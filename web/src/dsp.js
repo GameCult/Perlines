@@ -60,11 +60,13 @@ export class OnsetDetector {
   constructor(opts = {}) {
     this.compress = opts.compress ?? 200;       // log(1 + compress * mag)
     this.window = opts.window ?? 43;            // median history, frames
-    this.delta = opts.delta ?? 0.35;            // absolute floor above the median, in flux units
+    this.delta = opts.delta ?? 0.08;            // absolute floor above the median, in flux units
     this.ratio = opts.ratio ?? 1.6;             // and the flux must exceed ratio * median
     this.refractory = opts.refractory ?? 0.06;  // seconds
     this.minBin = opts.minBin ?? 2;
     this.maxBin = opts.maxBin ?? 0;             // 0 = all bins
+    this.bands = opts.bands ?? 6;               // log-spaced flux bands between minBin and maxBin
+    this.edges = null;
     this.prev = null;
     this.hist = [];                             // recent flux values
     this.f1 = 0; this.f2 = 0; this.t1 = 0;     // flux[n-1], flux[n-2], time[n-1]
@@ -74,17 +76,27 @@ export class OnsetDetector {
 
   push(mags, t) {
     const n = this.maxBin || mags.length;
+    if (!this.edges) {
+      this.edges = Array.from({ length: this.bands + 1 }, (_, i) => Math.round(this.minBin * Math.pow(n / this.minBin, i / this.bands)));
+      for (let i = 1; i < this.edges.length; i++) this.edges[i] = Math.max(this.edges[i], this.edges[i - 1] + 1);
+    }
     const cur = new Float32Array(n);
     for (let k = 0; k < n; k++) cur[k] = Math.log1p(this.compress * mags[k]);
     let flux = 0;
     if (this.prev) {
       const p = this.prev;
-      for (let k = this.minBin; k < n; k++) {
-        const ref = Math.max(p[k - 1] ?? 0, p[k], p[k + 1] ?? 0);
-        const d = cur[k] - ref;
-        if (d > 0) flux += d;
+      // flux per log-spaced band, each divided by sqrt(its width): a kick (a few bass bins) then counts
+      // as much as a hat (hundreds of treble bins), which one whole-spectrum sum would bury
+      for (let b = 0; b < this.edges.length - 1; b++) {
+        let bf = 0;
+        for (let k = this.edges[b]; k < this.edges[b + 1]; k++) {
+          const ref = Math.max(p[k - 1] ?? 0, p[k], p[k + 1] ?? 0);
+          const d = cur[k] - ref;
+          if (d > 0) bf += d;
+        }
+        flux += bf / Math.sqrt(this.edges[b + 1] - this.edges[b]);
       }
-      flux /= Math.sqrt(n);
+      flux /= this.edges.length - 1;
     }
     this.prev = cur;
     this.flux = flux;

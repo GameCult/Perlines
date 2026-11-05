@@ -77,9 +77,9 @@ export class DemoFeed {
     for (let k = 0; k < n; k++) {
       const f = k * hz + 1;
       let v = -105 + 12 * Math.sin(k * 12.9898 + t * 3) * 0.3;
-      v += 62 * kick * Math.exp(-Math.pow(Math.log2(f / 55), 2) * 1.5);
-      v += 52 * snare * Math.exp(-Math.pow(Math.log2(f / 1800), 2) * 0.35);
-      v += 45 * hat * Math.exp(-Math.pow(Math.log2(f / 9000), 2) * 0.5);
+      v += 78 * kick * Math.exp(-Math.pow(Math.log2(f / 55), 2) * 1.5);
+      v += 62 * snare * Math.exp(-Math.pow(Math.log2(f / 1800), 2) * 0.35);
+      v += 55 * hat * Math.exp(-Math.pow(Math.log2(f / 9000), 2) * 0.5);
       for (const c of chord) v += 55 * Math.exp(-Math.pow((f - c) / (hz * 0.8 + c * 0.01), 2));
       db[k] = v;
     }

@@ -34,7 +34,7 @@ void main(){
   vec3 c = mix(base, crest, smoothstep(0.1, 0.9, h));
   float lines = 0.55 + 0.45 * smoothstep(0.82, 1.0, abs(sin(seg * 256.0 * 3.14159)));
   float fade = (1.0 - ring) * (1.0 - ring) * 0.9 + 0.05;
-  float a = (0.02 + h * h * 0.75) * lines * fade * (1.0 + 1.5 * kick);
+  float a = (0.015 + h * h * 0.42) * lines * fade * (1.0 + 1.2 * kick);
   o = vec4(c * a, 1.0);
 }`;
 
