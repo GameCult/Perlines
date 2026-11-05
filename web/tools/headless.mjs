@@ -14,6 +14,8 @@ const proc = spawn(chrome, [`--remote-debugging-port=${port}`, `--user-data-dir=
   '--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1280,720',
   ...(process.env.CHROME_FLAGS ? process.env.CHROME_FLAGS.split(' ') : []), 'about:blank'], { stdio: 'ignore' });
 const stop = code => { try { proc.kill(); } catch {} process.exit(code); };
+process.on('uncaughtException', e => { console.error(e); stop(1); });   // never leave the browser running if we die first
+process.on('exit', () => { try { proc.kill(); } catch {} });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let targets;

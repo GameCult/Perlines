@@ -37,7 +37,7 @@ cd web && npm test        # node --test test/dsp.test.mjs (node >= 20, nothing t
 
 Covers: ten synthetic clicks found at two hop sizes (11.6 ms and 16.7 ms) with no false positives; silence, steady noise and a sustained tone give no onsets; a 20 ms doublet merges under the refractory period; the key estimate reads C major, A minor and (transposed) B minor from synthesized chord progressions. Fixtures are deliberately plain: the estimate is known to confuse relative major/minor when a clip leans on the dominant, and one test fixture was rewritten to put its tonic in more chords (the estimator was not tuned to the fixture).
 
-Frame time: the HUD shows rolling p50/p95 of requestAnimationFrame intervals against the 16.7 ms budget and CPU submit time. `?bench` runs the three scenes on the synthetic feed and prints JSON (`?w=1920&h=1080` fixes the drawing-buffer size, `&sync` times each frame with `gl.finish()` so vsync does not hide cost, `&ms=` sets seconds per scene). `web/tools/headless.mjs` drives headless Chrome over CDP to collect it. Results of the last run are in `web/BENCH.md`.
+Frame time: the HUD shows rolling p50/p95 of requestAnimationFrame intervals against the 16.7 ms budget and CPU submit time. `?bench` runs the three scenes on the synthetic feed and prints JSON (`?w=1920&h=1080` fixes the drawing-buffer size, `&sync` reads a pixel back after each frame so the measured frame time is real cost, not capped by vsync, `&ms=` sets seconds per scene). `web/tools/headless.mjs` drives headless Chrome over CDP to collect it. Results of the last run are in `web/BENCH.md`.
 
 ## Provenance
 

@@ -79,7 +79,7 @@ function pct(a, n, p) { const s = Array.from(a.subarray(0, n)).sort((x, y) => x 
 const record = { scenes: [] };
 let benchScene = -1, benchStart = 0, benchDt = [], benchCpu = [], benchGpu = [];
 const BENCH_MS = +(q.get('ms') || 6000), WARM_MS = 1000;
-const sync = q.has('sync');
+const sync = q.has('sync'), syncPx = new Uint8Array(4);
 
 function frame(now) {
   const t0 = performance.now();
@@ -101,7 +101,7 @@ function frame(now) {
   sc.draw(gl, A, canvas.width, canvas.height, hist);
   fb.present();
   if (qy) { gl.endQuery(timer.TIME_ELAPSED_EXT); pendingQ.push(qy); }
-  if (sync) gl.finish();
+  if (sync) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, syncPx);   // gl.finish() does not block under ANGLE; reading a pixel does
   cpuMs = performance.now() - t0;
 
   const dt = last ? now - last : 16.7; last = now;
@@ -131,6 +131,7 @@ function frame(now) {
 }
 
 function stepBench(now, dt, cpu) {
+  if (benchScene === 99) return;
   if (benchScene < 0) { benchScene = 0; benchStart = now; setScene(0); }
   const el = now - benchStart;
   if (el > WARM_MS) { benchDt.push(sync ? cpu : dt); benchCpu.push(cpu); }
