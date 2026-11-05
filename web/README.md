@@ -45,4 +45,4 @@ The ideas come from the 2013 Unity "Aethervis" project (Perlin-noise paths with 
 
 ## Not done
 
-Beat/tempo tracking, per-note lanes (the C# client has them), audio-worklet capture (onsets are quantized to the render frame rate), mobile tuning, a quality auto-scaler.
+Known weakness: on the synthetic demo feed at a simulated 30 fps the detector finds only about half the kicks (60 fps and 11.6 ms hops are fine); it has never been run on real music. Not built: beat/tempo tracking, per-note lanes (the C# client has them), audio-worklet capture (onsets are quantized to the render frame rate), mobile tuning, a quality auto-scaler.
