@@ -16,7 +16,7 @@ Any static server works (`python3 -m http.server -d web`). `localhost` counts as
 
 | Piece | File | What it does |
 |---|---|---|
-| Onset detector | `web/src/dsp.js` `OnsetDetector` | Log-compressed spectral flux against a max-filtered previous frame, moving-median adaptive threshold, local-peak pick, refractory period. Causal: confirms an onset one frame late. |
+| Onset detector | `web/src/dsp.js` `OnsetDetector` | Four-band spectral flux in dB (40-150, 150-600, 600-2500, 2.5-12 kHz) against a per-bin max of the two previous frames (max-filtered across +-1 bin), per-band median + 8 MAD threshold with a per-band minimum rise, local-peak pick, one refractory period over all bands. Level-independent. Causal: confirms an onset one frame late. Synthetic-drum scores: `tools/onset-bench.mjs`. |
 | Key estimate | `web/src/dsp.js` `KeyEstimator` | Peak-based chroma (parabolic-interpolated spectral peaks folded to 12 pitch classes, 4 s half-life) correlated against the 24 Krumhansl-Kessler key profiles. The key picks the scene tint: tonic walks the circle of fifths for hue, mode sets warmth. |
 | Analysis state | `web/src/analysis.js` | One object all scenes read: 128 log bands, bass/mid/treble, onset counter, chroma, key, tint. Also `DemoFeed`. |
 | Perlin noise | `web/src/noise.js` | Classic 3D Perlin and a 2D curl field (divergence-free flow) for the CPU-side paths. |
@@ -32,10 +32,13 @@ Any static server works (`python3 -m http.server -d web`). `localhost` counts as
 ## Tests and measurements
 
 ```sh
-cd web && npm test        # node --test test/dsp.test.mjs (node >= 20, nothing to install)
+cd web && npm test        # node --test test/dsp.test.mjs test/onset.test.mjs (node >= 20, nothing to install)
+cd web && npm run bench:onsets   # full synthetic-drum corpus, before/after table, about 30 s
 ```
 
-Covers: ten synthetic clicks found at two hop sizes (11.6 ms and 16.7 ms) with no false positives; silence, steady noise and a sustained tone give no onsets; a 20 ms doublet merges under the refractory period; the key estimate reads C major, A minor and (transposed) B minor from synthesized chord progressions. Fixtures are deliberately plain: the estimate is known to confuse relative major/minor when a clip leans on the dominant, and one test fixture was rewritten to put its tonic in more chords (the estimator was not tuned to the fixture).
+Covers (dsp.test): ten synthetic clicks found at two hop sizes (11.6 ms and 16.7 ms) with no false positives; silence, steady noise and a sustained tone give no onsets; a 20 ms doublet merges under the refractory period; the key estimate reads C major, A minor and (transposed) B minor from synthesized chord progressions. Fixtures are deliberately plain: the estimate is known to confuse relative major/minor when a clip leans on the dominant, and one test fixture was rewritten to put its tonic in more chords (the estimator was not tuned to the fixture).
+
+Covers (onset.test, synthetic drum corpus from `tools/onset-bench.mjs`: kick/snare/hat patterns at 90/120/150 bpm, three levels, bass+noise beds, 30 fps and 512-sample hops): hit rate, false positives and timing floors for the shipped detector, a margin over the frozen legacy detector, level independence, determinism. Synthetic only; the corpus was adjusted twice while building it (coincident kick+snare counted as one onset; voice tails faded so truncation clicks are not onsets), recorded in the commit message.
 
 Frame time: the HUD shows rolling p50/p95 of requestAnimationFrame intervals against the 16.7 ms budget and CPU submit time. `?bench` runs the three scenes on the synthetic feed and prints JSON (`?w=1920&h=1080` fixes the drawing-buffer size, `&sync` reads a pixel back after each frame so the measured frame time is real cost, not capped by vsync, `&ms=` sets seconds per scene). `web/tools/headless.mjs` drives headless Chrome over CDP to collect it. Results of the last run are in `web/BENCH.md`.
 

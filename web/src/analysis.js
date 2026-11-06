@@ -14,7 +14,7 @@ export class Analysis {
   constructor(sampleRate, binCount) {
     this.sampleRate = sampleRate; this.binCount = binCount;
     this.lin = new Float32Array(binCount);
-    this.onsets = new OnsetDetector({ maxBin: Math.min(binCount, Math.round(8000 / (sampleRate / 2 / binCount))) });
+    this.onsets = new OnsetDetector({ binHz: sampleRate / 2 / binCount });
     this.keyEst = new KeyEstimator(sampleRate, binCount);
     this.bands = new Float32Array(NB);
     this.row = new Uint8Array(NB);            // newest row, as texture bytes

@@ -50,71 +50,81 @@ export function dbToLinear(db, out) {
 }
 
 /**
- * Onset detector: log-compressed spectral flux against a max-filtered previous frame
- * (the max filter ignores vibrato wobble), a moving-median adaptive threshold, local-peak picking
- * and a refractory period. Causal: an onset on frame n-1 is confirmed when frame n arrives.
+ * Onset detector: band-split spectral flux in decibels. Each band has its own flux (mean positive dB rise
+ * against a max-filtered previous frame, which ignores vibrato wobble) and its own adaptive threshold
+ * (median + k * MAD over the last second), so a hat is judged against the hats and a kick against the
+ * kick, and the level of the track does not matter. Causal: a flux peak on frame n-1 is confirmed when
+ * frame n arrives. Bands are merged behind one refractory period.
  *
- * push(mags, t) -> null | { time, strength }   (time = the onset frame's own timestamp, seconds)
+ * push(mags, t) -> null | { time, strength, band }   (time = the onset frame's own timestamp, seconds)
  */
 export class OnsetDetector {
   constructor(opts = {}) {
-    this.compress = opts.compress ?? 200;       // log(1 + compress * mag)
-    this.window = opts.window ?? 43;            // median history, frames
-    this.delta = opts.delta ?? 0.08;            // absolute floor above the median, in flux units
-    this.ratio = opts.ratio ?? 1.6;             // and the flux must exceed ratio * median
-    this.refractory = opts.refractory ?? 0.06;  // seconds
-    this.minBin = opts.minBin ?? 2;
+    this.binHz = opts.binHz ?? 48000 / 2048;
+    this.edgesHz = opts.edgesHz ?? [40, 150, 600, 2500, 12000];
     this.maxBin = opts.maxBin ?? 0;             // 0 = all bins
-    this.bands = opts.bands ?? 6;               // log-spaced flux bands between minBin and maxBin
+    this.floorDb = opts.floorDb ?? -110;        // magnitudes below this are silence
+    this.history = opts.history ?? 1.0;         // seconds of flux per band for the threshold
+    this.k = opts.k ?? 8;                       // threshold = median + k * MAD (MAD scaled to sigma)
+    this.minRise = opts.minRise ?? [6, 3, 2, 2]; // and at least this many dB mean rise in the band (per band: the few bass bins are noisy)
+    this.refractory = opts.refractory ?? 0.05;  // seconds, all bands
     this.edges = null;
-    this.prev = null;
-    this.hist = [];                             // recent flux values
-    this.f1 = 0; this.f2 = 0; this.t1 = 0;     // flux[n-1], flux[n-2], time[n-1]
+    this.lag = opts.lag ?? 2;                   // reference = per-bin max over this many previous frames (1 or 2)
+    this.prev = null; this.prev2 = null;
+    this.hist = null;                           // per band: { t[], f[] }
+    this.f1 = null; this.f2 = null; this.t1 = 0; // per band flux[n-1], flux[n-2], time[n-1]
     this.last = -1e9;
-    this.flux = 0;                              // latest raw flux, for display
+    this.flux = 0;                              // largest band flux this frame, for display
   }
 
   push(mags, t) {
-    const n = this.maxBin || mags.length;
+    const n = Math.min(this.maxBin || mags.length, mags.length);
     if (!this.edges) {
-      this.edges = Array.from({ length: this.bands + 1 }, (_, i) => Math.round(this.minBin * Math.pow(n / this.minBin, i / this.bands)));
-      for (let i = 1; i < this.edges.length; i++) this.edges[i] = Math.max(this.edges[i], this.edges[i - 1] + 1);
+      this.edges = this.edgesHz.map(h => Math.min(n, Math.max(1, Math.round(h / this.binHz))));
+      for (let i = 1; i < this.edges.length; i++) this.edges[i] = Math.min(n, Math.max(this.edges[i], this.edges[i - 1] + 1));
+      const nb = this.edges.length - 1;
+      this.hist = Array.from({ length: nb }, () => ({ t: [], f: [] }));
+      this.f1 = new Float64Array(nb); this.f2 = new Float64Array(nb);
     }
+    const nb = this.edges.length - 1, lo = Math.pow(10, this.floorDb / 20);
     const cur = new Float32Array(n);
-    for (let k = 0; k < n; k++) cur[k] = Math.log1p(this.compress * mags[k]);
-    let flux = 0;
+    for (let k = 0; k < n; k++) cur[k] = 20 * Math.log10(Math.max(mags[k], lo));
+    const flux = new Float64Array(nb);
     if (this.prev) {
-      const p = this.prev;
-      // flux per log-spaced band, each divided by sqrt(its width): a kick (a few bass bins) then counts
-      // as much as a hat (hundreds of treble bins), which one whole-spectrum sum would bury
-      for (let b = 0; b < this.edges.length - 1; b++) {
-        let bf = 0;
-        for (let k = this.edges[b]; k < this.edges[b + 1]; k++) {
-          const ref = Math.max(p[k - 1] ?? 0, p[k], p[k + 1] ?? 0);
+      const p = this.prev, q = this.lag > 1 ? this.prev2 : null;
+      for (let b = 0; b < nb; b++) {
+        const a = this.edges[b], z = this.edges[b + 1];
+        let sum = 0;
+        for (let k = a; k < z; k++) {
+          let ref = Math.max(p[k - 1] ?? this.floorDb, p[k], p[k + 1] ?? this.floorDb);
+          if (q) ref = Math.max(ref, q[k - 1] ?? this.floorDb, q[k], q[k + 1] ?? this.floorDb);
           const d = cur[k] - ref;
-          if (d > 0) bf += d;
+          if (d > 0) sum += d;
         }
-        flux += bf / Math.sqrt(this.edges[b + 1] - this.edges[b]);
+        flux[b] = sum / (z - a);
       }
-      flux /= this.edges.length - 1;
     }
-    this.prev = cur;
-    this.flux = flux;
+    this.prev2 = this.prev; this.prev = cur;
+    this.flux = Math.max(...flux);
 
-    // candidate is the previous frame: f1 must be a local maximum over f2 and the new flux
-    let out = null;
-    const cand = this.f1;
-    if (this.hist.length >= 8 && cand > this.f2 && cand >= flux) {
-      const sorted = this.hist.slice().sort((a, b) => a - b);
-      const med = sorted[sorted.length >> 1];
-      if (cand > med * this.ratio + this.delta && this.t1 - this.last >= this.refractory) {
-        out = { time: this.t1, strength: Math.min(1, (cand - med) / (cand + 1e-6) * 1.5) };
-        this.last = this.t1;
+    // per band: the previous frame is a candidate when it is a local flux maximum over the threshold
+    let best = null;
+    for (let b = 0; b < nb; b++) {
+      const h = this.hist[b], cand = this.f1[b];
+      if (h.f.length >= 8 && cand > this.f2[b] && cand >= flux[b] && cand >= this.minRise[b]) {
+        const sorted = h.f.slice().sort((x, y) => x - y), med = sorted[sorted.length >> 1];
+        const dev = h.f.map(v => Math.abs(v - med)).sort((x, y) => x - y), mad = dev[dev.length >> 1] * 1.4826;
+        if (cand > med + this.k * mad && (!best || cand > best.flux)) best = { flux: cand, band: b };
       }
+      h.t.push(t); h.f.push(flux[b]);
+      while (h.t.length > 2 && t - h.t[0] > this.history) { h.t.shift(); h.f.shift(); }
     }
-    this.hist.push(flux);
-    if (this.hist.length > this.window) this.hist.shift();
-    this.f2 = this.f1; this.f1 = flux; this.t1 = t;
+    let out = null;
+    if (best && this.t1 - this.last >= this.refractory) {
+      out = { time: this.t1, strength: Math.min(1, best.flux / 15), band: best.band };
+      this.last = this.t1;
+    }
+    this.f2.set(this.f1); this.f1.set(flux); this.t1 = t;
     return out;
   }
 }
