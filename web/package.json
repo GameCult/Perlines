@@ -1,0 +1,13 @@
+{
+  "name": "perlines-web",
+  "version": "2.0.0",
+  "description": "Perlines v2: zero-install browser audio visualizer (WebAudio + WebGL2)",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/dsp.test.mjs test/onset.test.mjs",
+    "bench:onsets": "node tools/onset-bench.mjs",
+    "serve": "node tools/serve.mjs"
+  }
+}

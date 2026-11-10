@@ -1,6 +1,11 @@
 # Perlines
 
-Perlines is the 2012 Aethervis trail idea rebuilt as a Fensalir client: audio becomes a rolling field resource that Fensalir's renderer draws as a storm of curl-noise trails, with no private line renderer in the client.
+Perlines turns music into a storm of Perlin-noise trails. Two implementations live here:
+
+- **`web/` (v2, browser):** zero-install WebAudio + WebGL2 visualizer. Static folder, no build, no dependencies. File and microphone input, onset detection, key estimate that tints the scene, three scenes (aurora disk, burning water, vector trails). Entry: `node web/tools/serve.mjs`, then `http://localhost:8080/`; analysis in `web/src/dsp.js`; tests `cd web && npm test`; details in `web/README.md`. **Status: no human has watched it run.** It has synthetic-signal tests and headless-Chrome captures only; no real-GPU frame-time measurement exists yet (`web/BENCH.md`).
+- **`src/Perlines/` (Fensalir client, C#):** the 2012 Aethervis trail idea as a client of the Fensalir D3D12 renderer. Described below.
+
+The Fensalir client: Perlines is the 2012 Aethervis trail idea rebuilt as a Fensalir client: audio becomes a rolling field resource that Fensalir's renderer draws as a storm of curl-noise trails, with no private line renderer in the client.
 
 **Valuable here:** the signal path. `src/Perlines/PerlinesSignalProcessor.cs` turns audio into FFT energy, adaptively whitens it per band, detects the key, and projects bins onto musical scale-note lanes. `src/Perlines/PerlinesRuntime.cs` writes one Float32 column per frame into a rolling field resource and hands it to Fensalir (`Perlin4D.cs` and `SmoothNoise.cs` supply the noise). It is a worked example of a Fensalir client that owns a signal and leaves visibility, reservoir reuse, bloom and reconstruction to the renderer.
 
